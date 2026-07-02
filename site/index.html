@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>股票追蹤</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+</head>
+<body>
+<div class="container">
+  <header class="site">
+    <h1><a href="./">📈 股票追蹤</a></h1>
+    <span class="updated" id="updated"></span>
+  </header>
+  <div class="grid" id="grid"></div>
+  <footer>
+    資料來源：Yahoo Finance、SEC EDGAR ｜ 每日自動更新，偵測到新季報自動重算圖表<br>
+    僅供參考，不構成任何投資建議
+  </footer>
+</div>
+<script src="js/common.js"></script>
+<script>
+(async () => {
+  const grid = document.getElementById("grid");
+  try {
+    const data = await loadJSON("data/summary.json");
+    document.getElementById("updated").textContent = "更新：" + data.updated + "（台北時間）";
+    for (const s of data.stocks) {
+      const chg = s.changePct;
+      const cls = chg == null ? "" : chg >= 0 ? "up" : "down";
+      const zi = ["極度低估","偏低","合理","偏高","極度高估"].indexOf(s.zoneLabel);
+      const a = document.createElement("a");
+      a.className = "card";
+      a.href = "stock.html?symbol=" + encodeURIComponent(s.symbol);
+      a.innerHTML =
+        '<div class="row1"><span class="symbol">' + s.symbol + '</span>' +
+        '<span class="change ' + cls + '">' + fmtPct(chg) + "</span></div>" +
+        '<div class="name">' + (s.name || "") + "</div>" +
+        '<div class="row2"><span class="price ' + cls + '">$' + fmtPrice(s.price) + "</span>" +
+        '<span class="pe">本益比<br><b>' + fmtPE(s.pe) + "</b></span></div>" +
+        (zi >= 0 ? '<span class="zone ' + ZONE_CLASS[zi] + '">' + s.zoneLabel + "</span>" : "");
+      grid.appendChild(a);
+    }
+  } catch (e) {
+    grid.innerHTML = '<div class="error">資料載入失敗：' + e.message + "</div>";
+  }
+})();
+</script>
+</body>
+</html>

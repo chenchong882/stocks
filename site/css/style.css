@@ -1,0 +1,118 @@
+:root {
+  --bg: #0b0e14;
+  --card: #131722;
+  --card-hover: #1a2030;
+  --border: #1f2634;
+  --text: #d8dee9;
+  --muted: #7a869c;
+  --up: #16c784;
+  --down: #ea3943;
+  --accent: #f5a623;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+.container { max-width: 1080px; margin: 0 auto; padding: 20px 16px 48px; }
+
+header.site {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+header.site h1 { font-size: 22px; letter-spacing: 1px; }
+header.site h1 a { color: var(--text); text-decoration: none; }
+header.site .updated { color: var(--muted); font-size: 12px; }
+
+/* ---- 首頁卡片 ---- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-decoration: none;
+  color: var(--text);
+  display: block;
+  transition: background .15s, transform .15s;
+}
+.card:active, .card:hover { background: var(--card-hover); transform: translateY(-1px); }
+.card .row1 { display: flex; justify-content: space-between; align-items: baseline; }
+.card .symbol { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+.card .change { font-size: 13px; font-weight: 600; }
+.card .name {
+  color: var(--muted); font-size: 12px; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card .row2 { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 14px; }
+.card .price { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.card .pe { text-align: right; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.card .pe b { color: var(--text); font-size: 14px; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+
+.zone {
+  display: inline-block; margin-top: 10px; padding: 2px 8px;
+  border-radius: 20px; font-size: 11px; font-weight: 600;
+}
+.zone-0 { background: rgba(22,199,132,.16); color: #16c784; }
+.zone-1 { background: rgba(122,199,96,.16);  color: #7ac760; }
+.zone-2 { background: rgba(245,166,35,.16);  color: #f5a623; }
+.zone-3 { background: rgba(240,110,60,.16);  color: #f06e3c; }
+.zone-4 { background: rgba(234,57,67,.16);   color: #ea3943; }
+
+/* ---- 個股頁 ---- */
+.back { color: var(--muted); text-decoration: none; font-size: 14px; }
+.back:hover { color: var(--text); }
+
+.stock-head { margin: 14px 0 20px; }
+.stock-head .title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.stock-head h2 { font-size: 26px; }
+.stock-head .name { color: var(--muted); font-size: 14px; }
+.stock-head .quote { display: flex; align-items: baseline; gap: 14px; margin-top: 8px; flex-wrap: wrap; }
+.stock-head .price { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stock-head .meta { color: var(--muted); font-size: 13px; }
+.stock-head .meta b { color: var(--text); }
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.panel h3 { font-size: 15px; margin-bottom: 4px; }
+.panel .sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+
+#peChart { width: 100%; height: 400px; }
+.sankey-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+#sankeyChart { width: 100%; min-width: 660px; height: 480px; }
+
+.note { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.6; }
+.error { color: var(--down); padding: 40px 0; text-align: center; }
+
+footer { color: var(--muted); font-size: 11px; margin-top: 28px; line-height: 1.7; }
+
+@media (max-width: 640px) {
+  .container { padding: 14px 10px 40px; }
+  .grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .card { padding: 12px; }
+  .card .price { font-size: 18px; }
+  .stock-head .price { font-size: 24px; }
+  #peChart { height: 320px; }
+  #sankeyChart { height: 420px; }
+}

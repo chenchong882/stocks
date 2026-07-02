@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>個股</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+</head>
+<body>
+<div class="container">
+  <a class="back" href="./">← 返回列表</a>
+  <div id="content">
+    <div class="stock-head">
+      <div class="title"><h2 id="symbol"></h2><span class="name" id="name"></span></div>
+      <div class="quote">
+        <span class="price" id="price"></span>
+        <span class="change" id="change" style="font-size:16px;font-weight:600"></span>
+        <span class="meta">本益比 <b id="pe"></b></span>
+        <span id="zone"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>本益比河流圖</h3>
+      <div class="sub" id="peSub"></div>
+      <div id="peChart"></div>
+      <div class="note">估值線＝過去 5 年本益比 5%～95% 百分位間等距 6 個倍數 × 當時近四季 EPS（皆已調整拆股）。點擊或滑動圖表可查看數字。</div>
+    </div>
+
+    <div class="panel">
+      <h3>營收結構桑基圖</h3>
+      <div class="sub" id="skSub"></div>
+      <div class="sankey-scroll"><div id="sankeyChart"></div></div>
+      <div class="note" id="skNote"></div>
+    </div>
+  </div>
+</div>
+<script src="js/echarts.min.js"></script>
+<script src="js/common.js"></script>
+<script src="js/stock.js"></script>
+</body>
+</html>
