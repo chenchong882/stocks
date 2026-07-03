@@ -104,6 +104,8 @@ def update_symbol(symbol, prev):
     health = None
     try:
         health = compute.build_health(fp.health_series(t))
+        if health:
+            health["currency"] = quote["financialCurrency"]
     except Exception:
         traceback.print_exc()  # 體質卡缺料不影響其他區塊
 

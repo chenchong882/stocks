@@ -127,13 +127,21 @@ def health_series(t):
             "revenue": col_get(inc, col, "Total Revenue"),
             "grossProfit": col_get(inc, col, "Gross Profit"),
             "netIncome": col_get(inc, col, "Net Income"),
-            "equity": None, "totalDebt": None, "ocf": None,
+            "dilutedShares": col_get(inc, col, "Diluted Average Shares"),
+            "equity": None, "totalDebt": None, "inventory": None,
+            "ocf": None, "fcf": None,
         }
         if bs is not None and not bs.empty and col in bs.columns:
             row["equity"] = col_get(bs, col, "Stockholders Equity")
             row["totalDebt"] = col_get(bs, col, "Total Debt")
+            row["inventory"] = col_get(bs, col, "Inventory")
         if cf is not None and not cf.empty and col in cf.columns:
             row["ocf"] = col_get(cf, col, "Operating Cash Flow")
+            row["fcf"] = col_get(cf, col, "Free Cash Flow")
+            if row["fcf"] is None and row["ocf"] is not None:
+                capex = col_get(cf, col, "Capital Expenditure")
+                if capex is not None:
+                    row["fcf"] = row["ocf"] + capex  # capex 本身是負值
         if row["revenue"] is not None:
             out.append(row)
     out.sort(key=lambda r: r["end"])

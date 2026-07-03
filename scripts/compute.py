@@ -324,4 +324,82 @@ def build_health(rows):
                            "status": st, "level": lv,
                            "note": "近四季" if len(ocf4) >= 4 else "近 %d 季" % len(ocf4)}
 
+    # --- 第二排 ---
+
+    def yoy_pct(now, ago):
+        if now is None or not ago or ago <= 0:
+            return None
+        return round((now / ago - 1) * 100, 1)
+
+    yoy_row = _yoy_entry(rows)
+
+    # 營收 YoY：頭條為最新一季年增率，sparkline 為各季營收（億）
+    rev_yoy = yoy_pct(last["revenue"], (yoy_row or {}).get("revenue"))
+    if rev_yoy is not None:
+        if rev_yoy >= 20:
+            st, lv = "高速成長", "good"
+        elif rev_yoy >= 5:
+            st, lv = "穩健成長", "good"
+        elif rev_yoy >= 0:
+            st, lv = "低速成長", "mid"
+        else:
+            st, lv = "營收衰退", "bad"
+        health["revenueYoy"] = {
+            "value": rev_yoy, "latest": last["revenue"],
+            "trend": _trend(rows, lambda r: r["revenue"] / 1e8 if r["revenue"] else None),
+            "status": st, "level": lv}
+
+    # 自由現金流：頭條為近四季合計，附 FCF 利潤率
+    fcf4 = [r["fcf"] for r in rows[-4:] if r["fcf"] is not None]
+    rev4 = [r["revenue"] for r in rows[-4:] if r["fcf"] is not None and r["revenue"]]
+    if fcf4:
+        fcf_ttm = sum(fcf4)
+        margin = round(fcf_ttm / sum(rev4) * 100, 1) if rev4 else None
+        if fcf_ttm <= 0:
+            st, lv = "現金流出", "bad"
+        elif margin is not None and margin >= 15:
+            st, lv = "現金充沛", "good"
+        elif margin is not None and margin >= 5:
+            st, lv = "正常", "mid"
+        else:
+            st, lv = "偏薄", "mid"
+        health["fcf"] = {
+            "value": fcf_ttm, "margin": margin,
+            "trend": _trend(rows, lambda r: r["fcf"] / 1e8 if r["fcf"] is not None else None),
+            "status": st, "level": lv,
+            "note": "近四季" if len(fcf4) >= 4 else "近 %d 季" % len(fcf4)}
+
+    # 存貨 vs 營收增速：存貨增速明顯超過營收＝下游砍單的領先訊號
+    inv_yoy = yoy_pct(last["inventory"], (yoy_row or {}).get("inventory"))
+    if inv_yoy is not None and rev_yoy is not None:
+        gap = inv_yoy - rev_yoy
+        if gap > 15:
+            st, lv = "庫存堆積", "bad"
+        elif gap > 0:
+            st, lv = "略高於營收", "mid"
+        else:
+            st, lv = "庫存健康", "good"
+        health["inventory"] = {
+            "value": inv_yoy, "revYoy": rev_yoy,
+            "trend": _trend(rows, lambda r: r["inventory"] / 1e8 if r["inventory"] is not None else None),
+            "status": st, "level": lv}
+    elif last.get("inventory") is None:
+        health["inventory"] = {"na": True}  # 無存貨科目（服務業）
+
+    # 股數變化：負＝回購，正＝稀釋
+    sh_yoy = yoy_pct(last["dilutedShares"], (yoy_row or {}).get("dilutedShares"))
+    if sh_yoy is not None:
+        if sh_yoy <= -0.5:
+            st, lv = "回購中", "good"
+        elif sh_yoy < 1:
+            st, lv = "穩定", "neutral"
+        elif sh_yoy < 3:
+            st, lv = "輕微稀釋", "mid"
+        else:
+            st, lv = "明顯稀釋", "bad"
+        health["shares"] = {
+            "value": sh_yoy,
+            "trend": _trend(rows, lambda r: r["dilutedShares"] / 1e8 if r["dilutedShares"] else None),
+            "status": st, "level": lv}
+
     return health if len(health) > 1 else None

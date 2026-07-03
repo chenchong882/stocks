@@ -38,7 +38,9 @@
     const stats = document.getElementById("stats");
 
     const pp = (v) => (v == null ? "--" : (v >= 0 ? "+" : "") + v.toFixed(1) + "pp");
+    const pct = (v) => (v == null ? "--" : (v >= 0 ? "+" : "") + v.toFixed(1) + "%");
     const ppCls = (v) => (v == null ? "" : v >= 0 ? "up" : "down");
+    const hCur = h.currency || "USD";
     const CARDS = [
       { key: "roe", label: "ROE（近四季）", fmt: (v) => v.toFixed(1) + "%", unit: "%" },
       { key: "grossMargin", label: "毛利率（本季）", fmt: (v) => v.toFixed(1) + "%", unit: "%",
@@ -46,14 +48,22 @@
                       '</b>　vs 去年 <b class="' + ppCls(c.yoy) + '">' + pp(c.yoy) + "</b>" },
       { key: "debtEquity", label: "D/E 負債權益比", fmt: (v) => v.toFixed(2), unit: "" },
       { key: "ocfNi", label: "營業現金流 ÷ 淨利", fmt: (v) => v.toFixed(2), unit: "" },
+      { key: "revenueYoy", label: "營收年增率", fmt: pct, unit: " 億",
+        delta: (c) => "本季營收 <b>" + fmtYi(c.latest, hCur) + "</b>" },
+      { key: "fcf", label: "自由現金流（近四季）", fmt: (v) => fmtYi(v, hCur), unit: " 億",
+        delta: (c) => "FCF 利潤率 <b>" + (c.margin == null ? "--" : c.margin.toFixed(1) + "%") + "</b>" },
+      { key: "inventory", label: "存貨年增率", fmt: pct, unit: " 億",
+        delta: (c) => "營收年增 <b>" + pct(c.revYoy) + "</b>（比較基準）" },
+      { key: "shares", label: "股數變化（YoY）", fmt: pct, unit: " 億股" },
     ];
 
     for (const cfg of CARDS) {
       const c = h[cfg.key];
       const el = document.createElement("div");
       el.className = "stat";
-      if (!c) {
-        el.innerHTML = '<div class="label">' + cfg.label + '</div><div class="value">--</div>';
+      if (!c || c.na) {
+        el.innerHTML = '<div class="label">' + cfg.label + '</div><div class="value">--</div>' +
+          (c && c.na ? '<div class="delta">無存貨科目（非製造業）</div>' : "");
         stats.appendChild(el);
         continue;
       }
@@ -75,7 +85,7 @@
           tooltip: {
             backgroundColor: "#1a2030", borderColor: "#2a3345",
             textStyle: { color: CHART_TEXT, fontSize: 11 }, confine: true,
-            formatter: (p) => p[0].name + "（單季）<br><b>" + p[0].value + cfg.unit + "</b>",
+            formatter: (p) => p[0].name + "<br><b>" + p[0].value + cfg.unit + "</b>",
             trigger: "axis",
           },
           series: [{
