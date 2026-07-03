@@ -30,6 +30,70 @@
 
   const ZONE_COLORS = ["#16c784", "#7ac760", "#f5a623", "#f06e3c", "#ea3943"];
 
+  /* ---- 財務體質 ---- */
+  const h = d.health;
+  if (h) {
+    document.getElementById("healthPanel").hidden = false;
+    document.getElementById("hSub").textContent = "資料至 " + h.asOf;
+    const stats = document.getElementById("stats");
+
+    const pp = (v) => (v == null ? "--" : (v >= 0 ? "+" : "") + v.toFixed(1) + "pp");
+    const ppCls = (v) => (v == null ? "" : v >= 0 ? "up" : "down");
+    const CARDS = [
+      { key: "roe", label: "ROE（近四季）", fmt: (v) => v.toFixed(1) + "%", unit: "%" },
+      { key: "grossMargin", label: "毛利率（本季）", fmt: (v) => v.toFixed(1) + "%", unit: "%",
+        delta: (c) => 'vs 上季 <b class="' + ppCls(c.qoq) + '">' + pp(c.qoq) +
+                      '</b>　vs 去年 <b class="' + ppCls(c.yoy) + '">' + pp(c.yoy) + "</b>" },
+      { key: "debtEquity", label: "D/E 負債權益比", fmt: (v) => v.toFixed(2), unit: "" },
+      { key: "ocfNi", label: "營業現金流 ÷ 淨利", fmt: (v) => v.toFixed(2), unit: "" },
+    ];
+
+    for (const cfg of CARDS) {
+      const c = h[cfg.key];
+      const el = document.createElement("div");
+      el.className = "stat";
+      if (!c) {
+        el.innerHTML = '<div class="label">' + cfg.label + '</div><div class="value">--</div>';
+        stats.appendChild(el);
+        continue;
+      }
+      el.innerHTML =
+        '<div class="label">' + cfg.label + "</div>" +
+        '<div class="value">' + cfg.fmt(c.value) + "</div>" +
+        '<div class="delta">' + (cfg.delta ? cfg.delta(c) : "&nbsp;") + "</div>" +
+        '<div class="spark"></div>' +
+        '<span class="chip lv-' + c.level + '">' + c.status + "</span>";
+      stats.appendChild(el);
+
+      const trend = (c.trend || []).filter((t) => t.v != null);
+      if (trend.length >= 2) {
+        const spark = echarts.init(el.querySelector(".spark"));
+        spark.setOption({
+          grid: { left: 0, right: 0, top: 2, bottom: 2 },
+          xAxis: { type: "category", data: trend.map((t) => t.q), show: false },
+          yAxis: { type: "value", show: false, scale: true },
+          tooltip: {
+            backgroundColor: "#1a2030", borderColor: "#2a3345",
+            textStyle: { color: CHART_TEXT, fontSize: 11 }, confine: true,
+            formatter: (p) => p[0].name + "（單季）<br><b>" + p[0].value + cfg.unit + "</b>",
+            trigger: "axis",
+          },
+          series: [{
+            type: "bar", data: trend.map((t, i) => ({
+              value: t.v,
+              itemStyle: {
+                color: i === trend.length - 1 ? "#4aa8ff" : "rgba(74,168,255,.35)",
+                borderRadius: 2,
+              },
+            })),
+            barCategoryGap: "25%",
+          }],
+        });
+        window.addEventListener("resize", () => spark.resize());
+      }
+    }
+  }
+
   /* ---- 本益比河流圖 ---- */
   if (band) {
     document.getElementById("peSub").textContent =

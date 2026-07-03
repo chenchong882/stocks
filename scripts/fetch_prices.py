@@ -100,6 +100,46 @@ def quarterly_income(t):
     return col.strftime("%Y-%m-%d"), income
 
 
+def health_series(t):
+    """財務體質原始序列：每季 {end, revenue, grossProfit, netIncome, equity, totalDebt, ocf}。
+
+    來源：季度損益表＋資產負債表＋現金流量表（約 5–6 季）。全為比率用，幣別無妨。
+    """
+    inc = _retry(lambda: t.quarterly_income_stmt)
+    bs = _retry(lambda: t.quarterly_balance_sheet)
+    cf = _retry(lambda: t.quarterly_cashflow)
+
+    def col_get(df, col, row):
+        try:
+            v = df[col].get(row)
+            if v is None or (isinstance(v, float) and math.isnan(v)):
+                return None
+            return float(v)
+        except (KeyError, TypeError):
+            return None
+
+    out = []
+    if inc is None or inc.empty:
+        return out
+    for col in inc.columns:
+        row = {
+            "end": col.strftime("%Y-%m-%d"),
+            "revenue": col_get(inc, col, "Total Revenue"),
+            "grossProfit": col_get(inc, col, "Gross Profit"),
+            "netIncome": col_get(inc, col, "Net Income"),
+            "equity": None, "totalDebt": None, "ocf": None,
+        }
+        if bs is not None and not bs.empty and col in bs.columns:
+            row["equity"] = col_get(bs, col, "Stockholders Equity")
+            row["totalDebt"] = col_get(bs, col, "Total Debt")
+        if cf is not None and not cf.empty and col in cf.columns:
+            row["ocf"] = col_get(cf, col, "Operating Cash Flow")
+        if row["revenue"] is not None:
+            out.append(row)
+    out.sort(key=lambda r: r["end"])
+    return out
+
+
 def eps_history_fallback(t, limit=32):
     """SEC 無資料時（如 TSM 外國發行人）用 Yahoo 財報行事曆的實際 EPS。
 

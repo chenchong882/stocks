@@ -101,6 +101,12 @@ def update_symbol(symbol, prev):
 
     band = compute.pe_band(dates, closes, splits, eps_quarters, eps_years)
 
+    health = None
+    try:
+        health = compute.build_health(fp.health_series(t))
+    except Exception:
+        traceback.print_exc()  # 體質卡缺料不影響其他區塊
+
     sankey = None
     if income:
         sk = compute.build_sankey(income, segments, quote["financialCurrency"])
@@ -128,6 +134,7 @@ def update_symbol(symbol, prev):
         "epsQuarters": eps_quarters,
         "epsYears": eps_years,
         "peBand": band,
+        "health": health,
         "sankey": sankey,
     }
 

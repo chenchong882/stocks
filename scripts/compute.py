@@ -205,3 +205,123 @@ def build_sankey(income, segments, financial_currency):
 
 def quarter_label(period_end):
     return _quarter_label(period_end)
+
+
+# ---------------------------------------------------------------------------
+# 財務體質：ROE、毛利率趨勢、D/E、營業現金流/淨利
+# ---------------------------------------------------------------------------
+
+def _trend(rows, fn):
+    out = []
+    for r in rows:
+        v = fn(r)
+        out.append({"q": _quarter_label(r["end"]), "v": round(v, 2) if v is not None else None})
+    return out
+
+
+def _yoy_entry(rows, months=12):
+    """找去年同期（約 12 個月前）那一季。"""
+    if not rows:
+        return None
+    last = datetime.strptime(rows[-1]["end"], "%Y-%m-%d")
+    for r in rows[:-1]:
+        d = datetime.strptime(r["end"], "%Y-%m-%d")
+        if abs((last - d).days - 365) <= 40:
+            return r
+    return None
+
+
+def build_health(rows):
+    """組裝財務體質卡片資料。rows 為 health_series 輸出（依季底排序）。
+
+    每張卡：value（頭條值）、trend（各季 sparkline）、status（判讀文字）、
+    level（good/mid/bad/neutral，前端上色用）。全為比率，無幣別問題。
+    """
+    if len(rows) < 2:
+        return None
+    last = rows[-1]
+    health = {"asOf": last["end"]}
+
+    # ROE：頭條用近四季淨利 ÷ 平均股東權益；sparkline 為單季 ROE
+    roe_val = None
+    ni4 = [r["netIncome"] for r in rows[-4:] if r["netIncome"] is not None]
+    eqs = [r["equity"] for r in rows[-4:] if r["equity"] is not None]
+    if len(ni4) == 4 and eqs:
+        avg_eq = sum(eqs) / len(eqs)
+        if avg_eq > 0:
+            roe_val = round(sum(ni4) / avg_eq * 100, 1)
+    def roe_q(r):
+        if r["netIncome"] is None or not r["equity"] or r["equity"] <= 0:
+            return None
+        return r["netIncome"] / r["equity"] * 100
+    if roe_val is not None:
+        if roe_val >= 15:
+            st, lv = "良好", "good"
+        elif roe_val >= 8:
+            st, lv = "普通", "mid"
+        elif roe_val >= 0:
+            st, lv = "偏低", "bad"
+        else:
+            st, lv = "虧損", "bad"
+        health["roe"] = {"value": roe_val, "trend": _trend(rows, roe_q),
+                         "status": st, "level": lv, "note": "近四季，僅 %d 季資料" % len(ni4) if len(ni4) < 4 else "近四季"}
+
+    # 毛利率：頭條為最新一季，附 vs 上季 / vs 去年同期（百分點）
+    def gm(r):
+        if r["grossProfit"] is None or not r["revenue"]:
+            return None
+        return r["grossProfit"] / r["revenue"] * 100
+    gm_now = gm(last)
+    if gm_now is not None:
+        gm_prev = gm(rows[-2])
+        yoy_row = _yoy_entry(rows)
+        gm_yoy = gm(yoy_row) if yoy_row else None
+        qoq = round(gm_now - gm_prev, 1) if gm_prev is not None else None
+        yoy = round(gm_now - gm_yoy, 1) if gm_yoy is not None else None
+        if qoq is None:
+            st, lv = "—", "neutral"
+        elif qoq > 0.3:
+            st, lv = "較上季上升", "good"
+        elif qoq < -0.3:
+            st, lv = "較上季下滑", "bad"
+        else:
+            st, lv = "大致持平", "neutral"
+        health["grossMargin"] = {"value": round(gm_now, 1), "qoq": qoq, "yoy": yoy,
+                                 "trend": _trend(rows, gm), "status": st, "level": lv}
+
+    # D/E：有息負債 ÷ 股東權益
+    def de(r):
+        if r["totalDebt"] is None or not r["equity"] or r["equity"] <= 0:
+            return None
+        return r["totalDebt"] / r["equity"]
+    de_now = de(last)
+    if de_now is not None:
+        if de_now < 0.5:
+            st, lv = "低槓桿", "good"
+        elif de_now < 1.5:
+            st, lv = "適中", "mid"
+        else:
+            st, lv = "偏高", "bad"
+        health["debtEquity"] = {"value": round(de_now, 2), "trend": _trend(rows, de),
+                                "status": st, "level": lv}
+
+    # 營業現金流 ÷ 淨利：頭條用近四季合計（單季波動大）
+    ocf4 = [r["ocf"] for r in rows[-4:] if r["ocf"] is not None]
+    ni4v = [r["netIncome"] for r in rows[-4:] if r["ocf"] is not None and r["netIncome"] is not None]
+    def ocf_ni(r):
+        if r["ocf"] is None or not r["netIncome"] or r["netIncome"] <= 0:
+            return None
+        return r["ocf"] / r["netIncome"]
+    if ocf4 and ni4v and sum(ni4v) > 0:
+        ratio = round(sum(ocf4) / sum(ni4v), 2)
+        if ratio >= 1:
+            st, lv = "現金紮實", "good"
+        elif ratio >= 0.7:
+            st, lv = "尚可", "mid"
+        else:
+            st, lv = "含金量偏低", "bad"
+        health["ocfNi"] = {"value": ratio, "trend": _trend(rows, ocf_ni),
+                           "status": st, "level": lv,
+                           "note": "近四季" if len(ocf4) >= 4 else "近 %d 季" % len(ocf4)}
+
+    return health if len(health) > 1 else None
