@@ -223,6 +223,40 @@
       // 淨利潤排到同欄最後：沿最下方的綠色獲利帶走，與稅務/其他支出分開
       const ni = nodes.findIndex((n) => n.name === "淨利潤");
       if (ni >= 0) nodes.push(nodes.splice(ni, 1)[0]);
+
+      // 隱形墊高節點：layoutIterations 0 會讓各欄照資料順序從頂端往下堆，
+      // 營業利益／淨利潤那幾欄節點少，會全部擠在最上面。插入透明節點把
+      // 獲利帶（毛利潤→營業利益→淨利潤）壓到下半部往下延伸，費用帶維持在上半部。
+      const inSum = {}, outSum = {};
+      for (const l of sk.links) {
+        outSum[l.source] = (outSum[l.source] || 0) + l.value;
+        inSum[l.target] = (inSum[l.target] || 0) + l.value;
+      }
+      const valOf = (m) => Math.max(inSum[m] || 0, outSum[m] || 0);
+      const total = valOf("總營收");
+      const colSum = (names) => names.reduce(
+        (s, m) => s + (nodes.some((n) => n.name === m) ? valOf(m) : 0), 0);
+      let spacerSeq = 0;
+      const padAbove = (name, value) => {
+        const i = nodes.findIndex((n) => n.name === name);
+        if (i < 0 || value <= 0) return;
+        nodes.splice(i, 0, {
+          name: "​" + (++spacerSeq), value, depth: nodes[i].depth,
+          itemStyle: { color: "transparent" }, label: { show: false },
+          emphasis: { disabled: true }, tooltip: { show: false },
+        });
+      };
+      const EXP_COL = ["研發費用", "銷售與管理費用", "其他營運費用"];
+      const LAST_COL = ["稅務支出", "其他支出", "淨利潤"];
+      // 費用帶不貼死頂端：讓營運費用落在毛利潤上緣再高約 15% 圖高的位置
+      const topPad = Math.max(0, valOf("營收成本") - valOf("營運費用") - total * 0.15);
+      padAbove("營運費用", topPad);
+      padAbove(EXP_COL.find((m) => nodes.some((n) => n.name === m)), topPad);
+      padAbove("營業利益", total - topPad - colSum(["營運費用", "營業利益"]));
+      padAbove("業外收入", total - topPad - colSum([...EXP_COL, "業外收入"]));
+      const lastTop = nodes.find((n) => LAST_COL.includes(n.name));
+      if (lastTop) padAbove(lastTop.name, total - colSum(LAST_COL));
+
       const links = sk.links.map((l) => ({
         ...l,
         lineStyle: { color: "gradient", opacity: 0.3, curveness: 0.55 },
@@ -239,6 +273,7 @@
               return segName(p.data.source) + " → " + segName(p.data.target) +
                 "<br><b>" + fmtYi(p.data.value, cur) + "</b>";
             }
+            if (p.name.startsWith("​")) return "";
             return segName(p.name) + "<br><b>" + fmtYi(p.value, cur) + "</b>";
           },
         },
