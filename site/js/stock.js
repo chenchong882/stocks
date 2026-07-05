@@ -189,78 +189,131 @@
   }
 
   /* ---- 營收桑基圖 ---- */
-  const sk = d.sankey;
+  const periods = (d.sankeyPeriods && d.sankeyPeriods.length)
+    ? d.sankeyPeriods : (d.sankey ? [d.sankey] : []);
   const skNote = document.getElementById("skNote");
-  if (sk) {
-    const cur = sk.financialCurrency || "USD";
-    document.getElementById("skSub").textContent =
-      sk.quarter + " 財報（截至 " + sk.periodEnd + "）｜ 單位：億 " + cur;
-
-    const TYPE_COLOR = { revenue: "#f5a623", profit: "#16c784", cost: "#ea3943" };
-    const SEG_PALETTE = ["#f5a623", "#f7b955", "#e8890c", "#ffd166", "#f28e2b", "#d9822b", "#c9781f"];
-    let segIdx = 0;
-    const isSeg = new Set(sk.links.filter((l) => l.target === "總營收").map((l) => l.source));
-
-    // 依財務流向固定欄位，讓「業外收入」出現在右側靠近淨利潤
-    const DEPTHS = {
-      "總營收": 1, "營收成本": 2, "毛利潤": 2,
-      "營運費用": 3, "營業利益": 3,
-      "研發費用": 4, "銷售與管理費用": 4, "其他營運費用": 4, "業外收入": 4,
-      "稅務支出": 5, "其他支出": 5, "淨利潤": 5,
-    };
-    const dShift = sk.hasSegments ? 0 : 1;
-    const nodes = sk.nodes.map((n) => ({
-      name: n.name,
-      depth: isSeg.has(n.name) ? 0 : (DEPTHS[n.name] != null ? DEPTHS[n.name] - dShift : undefined),
-      itemStyle: { color: isSeg.has(n.name) ? SEG_PALETTE[segIdx++ % SEG_PALETTE.length] : TYPE_COLOR[n.type] },
-      _type: n.type,
-    }));
-    const links = sk.links.map((l) => ({
-      ...l,
-      lineStyle: { color: "gradient", opacity: 0.3, curveness: 0.55 },
-    }));
-
+  if (periods.length) {
     const skChart = echarts.init(document.getElementById("sankeyChart"));
-    skChart.setOption({
-      textStyle: { fontFamily: CHART_FONT },
-      tooltip: {
-        backgroundColor: "#1a2030", borderColor: "#2a3345",
-        textStyle: { color: CHART_TEXT, fontSize: 12 },
-        confine: true,
-        formatter: (p) => {
-          if (p.dataType === "edge") {
-            return segName(p.data.source) + " → " + segName(p.data.target) +
-              "<br><b>" + fmtYi(p.data.value, cur) + "</b>";
-          }
-          return segName(p.name) + "<br><b>" + fmtYi(p.value, cur) + "</b>";
-        },
-      },
-      series: [{
-        type: "sankey",
-        left: 6, right: 130, top: 14, bottom: 14,
-        nodeWidth: 12, nodeGap: 14, nodeAlign: "left",
-        emphasis: { focus: "adjacency" },
-        data: nodes,
-        links,
-        label: {
-          color: CHART_TEXT, fontSize: 11,
-          formatter: (p) => {
-            const t = p.data._type;
-            const color = t === "cost" ? "#ff8890" : t === "profit" ? "#4fe0a6" : "#ffc75e";
-            return segName(p.name) + "\n{v|" + fmtYi(p.value, "") + "}";
-          },
-          rich: { v: { color: CHART_MUTED, fontSize: 10, lineHeight: 16 } },
-        },
-        lineStyle: { color: "gradient" },
-      }],
-    });
     window.addEventListener("resize", () => skChart.resize());
 
-    const notes = [];
-    if (!sk.hasSegments) notes.push("此公司未於財報中提供可解析的季度營收分項，僅顯示損益表流向。");
-    if (cur !== "USD") notes.push("財報幣別為 " + cur + "。");
-    notes.push("資料來源：公司申報之財務報表，點擊節點或流帶可查看數字。");
-    skNote.textContent = notes.join(" ");
+    const renderSankey = (sk) => {
+      const cur = sk.financialCurrency || "USD";
+      document.getElementById("skSub").textContent =
+        sk.quarter + (sk.annual ? "" : " 財報") + "（截至 " + sk.periodEnd + "）｜ 單位：億 " + cur;
+
+      const TYPE_COLOR = { revenue: "#f5a623", profit: "#16c784", cost: "#ea3943" };
+      const SEG_PALETTE = ["#f5a623", "#f7b955", "#e8890c", "#ffd166", "#f28e2b", "#d9822b", "#c9781f"];
+      let segIdx = 0;
+      const isSeg = new Set(sk.links.filter((l) => l.target === "總營收").map((l) => l.source));
+
+      // 依財務流向固定欄位，讓「業外收入」出現在右側靠近淨利潤
+      const DEPTHS = {
+        "總營收": 1, "營收成本": 2, "毛利潤": 2,
+        "營運費用": 3, "營業利益": 3,
+        "研發費用": 4, "銷售與管理費用": 4, "其他營運費用": 4, "業外收入": 4,
+        "稅務支出": 5, "其他支出": 5, "淨利潤": 5,
+      };
+      const dShift = sk.hasSegments ? 0 : 1;
+      const nodes = sk.nodes.map((n) => ({
+        name: n.name,
+        depth: isSeg.has(n.name) ? 0 : (DEPTHS[n.name] != null ? DEPTHS[n.name] - dShift : undefined),
+        itemStyle: { color: isSeg.has(n.name) ? SEG_PALETTE[segIdx++ % SEG_PALETTE.length] : TYPE_COLOR[n.type] },
+        _type: n.type,
+      }));
+      // 淨利潤排到同欄最後：沿最下方的綠色獲利帶走，與稅務/其他支出分開
+      const ni = nodes.findIndex((n) => n.name === "淨利潤");
+      if (ni >= 0) nodes.push(nodes.splice(ni, 1)[0]);
+      const links = sk.links.map((l) => ({
+        ...l,
+        lineStyle: { color: "gradient", opacity: 0.3, curveness: 0.55 },
+      }));
+
+      skChart.setOption({
+        textStyle: { fontFamily: CHART_FONT },
+        tooltip: {
+          backgroundColor: "#1a2030", borderColor: "#2a3345",
+          textStyle: { color: CHART_TEXT, fontSize: 12 },
+          confine: true,
+          formatter: (p) => {
+            if (p.dataType === "edge") {
+              return segName(p.data.source) + " → " + segName(p.data.target) +
+                "<br><b>" + fmtYi(p.data.value, cur) + "</b>";
+            }
+            return segName(p.name) + "<br><b>" + fmtYi(p.value, cur) + "</b>";
+          },
+        },
+        series: [{
+          type: "sankey",
+          left: 6, right: 130, top: 14, bottom: 14,
+          // layoutIterations 0：各欄依資料順序排（成本在上、獲利在下），
+          // 搭配較大的 nodeGap 讓小節點（淨利潤/稅務/其他支出）的標籤不重疊
+          nodeWidth: 12, nodeGap: 22, nodeAlign: "left", layoutIterations: 0,
+          emphasis: { focus: "adjacency" },
+          data: nodes,
+          links,
+          label: {
+            color: CHART_TEXT, fontSize: 11,
+            formatter: (p) => segName(p.name) + "\n{v|" + fmtYi(p.value, "") + "}",
+            rich: { v: { color: CHART_MUTED, fontSize: 10, lineHeight: 16 } },
+          },
+          lineStyle: { color: "gradient" },
+        }],
+      }, true);
+
+      const notes = [];
+      if (!sk.hasSegments) notes.push("此公司未於財報中提供可解析的" + (sk.annual ? "年度" : "季度") + "營收分項，僅顯示損益表流向。");
+      if (cur !== "USD") notes.push("財報幣別為 " + cur + "。");
+      notes.push("資料來源：公司申報之財務報表，點擊節點或流帶可查看數字。");
+      skNote.textContent = notes.join(" ");
+    };
+
+    /* 期間選擇器：年份 × （Q1～Q4／全年） */
+    let current = periods.find((p) => !p.annual) || periods[0];
+    const controls = document.getElementById("skControls");
+    if (periods.length > 1) {
+      const byYear = {};
+      for (const p of periods) (byYear[p.periodEnd.slice(0, 4)] ||= []).push(p);
+      const years = Object.keys(byYear).sort().reverse();
+
+      const mkGroup = (items, isOn, onPick) => {
+        const g = document.createElement("div");
+        g.className = "seg-group";
+        for (const it of items) {
+          const b = document.createElement("button");
+          b.textContent = it.label;
+          if (isOn(it)) b.classList.add("on");
+          b.onclick = () => onPick(it);
+          g.appendChild(b);
+        }
+        return g;
+      };
+
+      const renderControls = () => {
+        controls.innerHTML = "";
+        const curYear = current.periodEnd.slice(0, 4);
+        controls.appendChild(mkGroup(
+          years.map((y) => ({ label: y + " 年", year: y })),
+          (it) => it.year === curYear,
+          (it) => {
+            // 換年份時盡量停留在同一季（或同為全年）
+            const list = byYear[it.year];
+            const suffix = current.annual ? null : current.quarter.split(" ")[1];
+            current = (current.annual ? list.find((p) => p.annual) : null)
+              || (suffix ? list.find((p) => !p.annual && p.quarter.endsWith(" " + suffix)) : null)
+              || list.find((p) => !p.annual) || list[0];
+            renderControls(); renderSankey(current);
+          }));
+        const list = byYear[curYear].slice().sort((a, b) =>
+          (a.annual - b.annual) || a.periodEnd.localeCompare(b.periodEnd));
+        controls.appendChild(mkGroup(
+          list.map((p) => ({ label: p.annual ? "全年" : p.quarter.split(" ")[1], period: p })),
+          (it) => it.period === current,
+          (it) => { current = it.period; renderControls(); renderSankey(current); }));
+      };
+      renderControls();
+      controls.hidden = false;
+    }
+    renderSankey(current);
   } else {
     document.getElementById("sankeyChart").innerHTML =
       '<div class="error">尚無本季損益資料</div>';

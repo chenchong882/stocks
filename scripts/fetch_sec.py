@@ -140,11 +140,16 @@ def filing_dir_url(cik, accession):
         cik, accession.replace("-", ""))
 
 
+_ixbrl_cache = {}  # accession -> facts（同一份文件在多個期間會重複用到）
+
+
 def parse_ixbrl_revenue_facts(cik, filing):
     """從 inline XBRL 主文件解析帶維度的營收 facts。
 
     回傳 [{dim, member, start, end, val}]，僅含單一維度（產品線或業務分部）的營收。
     """
+    if filing["accession"] in _ixbrl_cache:
+        return _ixbrl_cache[filing["accession"]]
     url = "%s/%s" % (filing_dir_url(cik, filing["accession"]), filing["primaryDocument"])
     html = _get(url).text
 
@@ -201,14 +206,20 @@ def parse_ixbrl_revenue_facts(cik, filing):
         seen.add(key)
         facts.append({"dim": ctx["dim"], "member": ctx["member"],
                       "start": ctx["start"], "end": ctx["end"], "val": val})
+    _ixbrl_cache[filing["accession"]] = facts
     return facts
+
+
+_labels_cache = {}
 
 
 def get_member_labels(cik, filing):
     """從 MetaLinks.json 取各 member 的人類可讀標籤。"""
+    if filing["accession"] in _labels_cache:
+        return _labels_cache[filing["accession"]]
     url = "%s/MetaLinks.json" % filing_dir_url(cik, filing["accession"])
     r = _get(url)
-    labels = {}
+    labels = _labels_cache[filing["accession"]] = {}
     if not r:
         return labels
     try:
@@ -265,10 +276,12 @@ def _remove_subtotals(rows):
     return kept
 
 
-def extract_segments(cik, filing, quarter_end, total_revenue, prev_10q=None):
-    """取目標季度的營收分項 [{name, value}]，驗證加總後回傳；失敗回傳 []。
+def extract_segments(cik, filing, quarter_end, total_revenue, prev_10q=None,
+                     annual=False):
+    """取目標期間的營收分項 [{name, value}]，驗證加總後回傳；失敗回傳 []。
 
-    filing 為 10-Q 時直接取 3 個月期間 facts；為 10-K 時以 全年 − 前三季YTD 推得 Q4。
+    filing 為 10-Q 時直接取 3 個月期間 facts；為 10-K 時以 全年 − 前三季YTD 推得 Q4；
+    annual=True 時直接取 10-K 的全年期間 facts（桑基圖年度檢視用）。
     """
     facts = parse_ixbrl_revenue_facts(cik, filing)
     labels = get_member_labels(cik, filing)
@@ -287,6 +300,8 @@ def extract_segments(cik, filing, quarter_end, total_revenue, prev_10q=None):
     ytd_facts = None
 
     def rows_for(dim):
+        if annual:
+            return pick(facts, dim, quarter_end, 330, 380)
         if filing["form"].startswith("10-Q") or filing["form"] in ("6-K",):
             return pick(facts, dim, quarter_end, 80, 100)
         # 10-K：全年 − 前三季 YTD（YTD 值在前一份 10-Q）

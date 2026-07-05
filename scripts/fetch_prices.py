@@ -61,19 +61,8 @@ def get_quote(t):
     }
 
 
-def quarterly_income(t):
-    """最新一季損益表主要科目（原幣別）。回傳 (period_end_str, dict) 或 (None, None)。"""
-    df = _retry(lambda: t.quarterly_income_stmt)
-    if df is None or df.empty:
-        return None, None
-    col = df.columns[0]  # 最新一季
-    # 最新一欄可能幾乎全空（僅少數科目先公布），改用第一個營收非空的欄位
-    for c in df.columns:
-        v = df[c].get("Total Revenue")
-        if v is not None and not (isinstance(v, float) and math.isnan(v)):
-            col = c
-            break
-
+def _income_from_col(df, col):
+    """單一期間欄位 → 損益表主要科目 dict；營收或淨利缺漏回傳 None。"""
     def g(row):
         try:
             v = df[col].get(row)
@@ -96,8 +85,26 @@ def quarterly_income(t):
         "netIncome": g("Net Income"),
     }
     if income["revenue"] is None or income["netIncome"] is None:
-        return None, None
-    return col.strftime("%Y-%m-%d"), income
+        return None
+    return income
+
+
+def income_history(t, annual=False):
+    """所有可得期間的損益表主要科目（原幣別）。
+
+    annual=False 取季度（約近 5 季）、True 取年度（約近 4 個財年）。
+    回傳 [(period_end_str, dict)]，新到舊；營收或淨利缺漏的期間略過
+    （最新一欄常只先公布少數科目）。
+    """
+    df = _retry(lambda: t.income_stmt if annual else t.quarterly_income_stmt)
+    out = []
+    if df is None or df.empty:
+        return out
+    for col in df.columns:
+        income = _income_from_col(df, col)
+        if income:
+            out.append((col.strftime("%Y-%m-%d"), income))
+    return out
 
 
 def health_series(t):

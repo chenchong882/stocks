@@ -45,40 +45,93 @@ def latest_sec_filing(symbol):
     return cik, filings[0], filings
 
 
-def build_financials(symbol, cik, filing, filings, ticker, income, period_end):
-    """重抓財報：EPS 歷史（SEC 優先）與營收分項。"""
-    eps_quarters, eps_years, segments = [], [], []
+def build_financials(symbol, cik, filing, ticker):
+    """重抓財報：EPS 歷史（SEC 優先，退回 Yahoo）。"""
+    eps_quarters, eps_years = [], []
     if cik and filing and filing["form"] in ("10-Q", "10-K"):
         facts = sec.get_companyfacts(cik)
         if facts:
             eps_quarters, eps_years = sec.quarterly_eps(facts)
-        # 分項期間需與損益表同一季，否則桑基圖左右對不上。
-        # 非月底結帳的公司（AAPL 3/28、NVDA 4/26…）yfinance 會標成月底，容忍 ±7 天
-        same_quarter = False
-        if income and period_end and filing.get("reportDate"):
-            d1 = datetime.strptime(filing["reportDate"], "%Y-%m-%d")
-            d2 = datetime.strptime(period_end, "%Y-%m-%d")
-            same_quarter = abs((d1 - d2).days) <= 7
-        if same_quarter:
-            prev_10q = None
-            if filing["form"] == "10-K":
-                prev_10q = next((f for f in filings[1:] if f["form"] == "10-Q"), None)
-            try:
-                segments = sec.extract_segments(cik, filing, filing["reportDate"],
-                                                income.get("revenue"), prev_10q)
-            except Exception:
-                print("  segments 解析失敗（退回無分項）: %s" % symbol)
-                traceback.print_exc()
     if not eps_quarters:
         eps_quarters = fp.eps_history_fallback(ticker)
-    return eps_quarters, eps_years, segments
+    return eps_quarters, eps_years
+
+
+def find_filing(filings, period_end, annual):
+    """找涵蓋該期間的申報：reportDate 與期末日差 ±7 天。
+
+    非月底結帳的公司（AAPL 3/28、NVDA 4/26…）yfinance 會標成月底，故容忍 ±7 天。
+    回傳 (index, filing) 或 (None, None)。
+    """
+    d2 = datetime.strptime(period_end, "%Y-%m-%d")
+    for i, f in enumerate(filings or []):
+        if annual and f["form"] not in ("10-K", "20-F"):
+            continue
+        d1 = datetime.strptime(f["reportDate"], "%Y-%m-%d")
+        if abs((d1 - d2).days) <= 7:
+            return i, f
+    return None, None
+
+
+def build_sankey_periods(symbol, cik, filings, ticker, quote, prev_periods):
+    """桑基圖多期資料：季度（近 5 季）＋年度（近 4 財年）。
+
+    歷史財報不會變，已算過的期間直接沿用快取（除非 FORCE，或先前
+    沒抓到分項而現在有新的申報可以再試）。
+    """
+    force = os.environ.get("FORCE") == "1"
+    prev_map = {(p["periodEnd"], bool(p.get("annual"))): p
+                for p in (prev_periods or [])}
+    rows = [(end, income, False) for end, income in fp.income_history(ticker)]
+    rows += [(end, income, True) for end, income in fp.income_history(ticker, annual=True)]
+
+    out = []
+    for period_end, income, annual in rows:
+        idx, filing = (find_filing(filings, period_end, annual)
+                       if cik else (None, None))
+        cached = prev_map.get((period_end, annual))
+        if cached and not force and (
+                cached.get("hasSegments")
+                or cached.get("segSource") == (filing or {}).get("accession")):
+            out.append(cached)
+            continue
+
+        segments = []
+        if filing:
+            prev_10q = None
+            if filing["form"] == "10-K" and not annual:
+                # Q4 = 全年 − 前三季 YTD，YTD 在該 10-K 之前的最後一份 10-Q
+                prev_10q = next((f for f in filings[idx + 1:] if f["form"] == "10-Q"), None)
+            try:
+                segments = sec.extract_segments(cik, filing, filing["reportDate"],
+                                                income.get("revenue"), prev_10q,
+                                                annual=annual)
+            except Exception:
+                print("  segments 解析失敗（退回無分項）: %s %s" % (symbol, period_end))
+                traceback.print_exc()
+
+        sk = compute.build_sankey(income, segments, quote["financialCurrency"])
+        if not sk:
+            continue
+        label = ("%s 全年" % period_end[:4]) if annual else compute.quarter_label(period_end)
+        out.append({
+            "quarter": label,
+            "periodEnd": period_end,
+            "annual": annual,
+            "segmentsRaw": segments,
+            "segSource": (filing or {}).get("accession"),
+            **sk,
+        })
+
+    # 新到舊；同期末日時季度排前（前端預設取第一個季度）
+    out.sort(key=lambda p: (p["periodEnd"], not p["annual"]), reverse=True)
+    return out
 
 
 def update_symbol(symbol, prev):
     t = fp.get_ticker(symbol)
     quote = fp.get_quote(t)
     dates, closes, splits = fp.get_price_history(t)
-    period_end, income = fp.quarterly_income(t)
 
     cik, filing, filings = latest_sec_filing(symbol)
     prev_filing = (prev or {}).get("latestFiling") or {}
@@ -87,17 +140,14 @@ def update_symbol(symbol, prev):
         or os.environ.get("FORCE") == "1"
         or not prev.get("epsQuarters")
         or (filing or {}).get("accession") != prev_filing.get("accession")
-        or (prev.get("sankey") or {}).get("periodEnd") != period_end
     )
 
     if need_refresh:
         print("  重抓財報（%s）" % ((filing or {}).get("form", "yfinance")))
-        eps_quarters, eps_years, segments = build_financials(
-            symbol, cik, filing, filings, t, income, period_end)
+        eps_quarters, eps_years = build_financials(symbol, cik, filing, t)
     else:
         eps_quarters = prev["epsQuarters"]
         eps_years = prev.get("epsYears") or []
-        segments = (prev.get("sankey") or {}).get("segmentsRaw") or []
 
     band = compute.pe_band(dates, closes, splits, eps_quarters, eps_years)
 
@@ -109,16 +159,14 @@ def update_symbol(symbol, prev):
     except Exception:
         traceback.print_exc()  # 體質卡缺料不影響其他區塊
 
-    sankey = None
-    if income:
-        sk = compute.build_sankey(income, segments, quote["financialCurrency"])
-        if sk:
-            sankey = {
-                "quarter": compute.quarter_label(period_end),
-                "periodEnd": period_end,
-                "segmentsRaw": segments,
-                **sk,
-            }
+    try:
+        sankey_periods = build_sankey_periods(
+            symbol, cik, filings, t, quote, (prev or {}).get("sankeyPeriods"))
+    except Exception:
+        traceback.print_exc()  # 桑基圖缺料不影響其他區塊，沿用舊資料
+        sankey_periods = (prev or {}).get("sankeyPeriods") or []
+    # 首頁摘要與舊版前端用：最新一季
+    sankey = next((p for p in sankey_periods if not p.get("annual")), None)
 
     price = quote["price"]
     pe = None
@@ -138,6 +186,7 @@ def update_symbol(symbol, prev):
         "peBand": band,
         "health": health,
         "sankey": sankey,
+        "sankeyPeriods": sankey_periods,
     }
 
 
