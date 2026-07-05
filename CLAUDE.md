@@ -30,3 +30,9 @@ commit 用 `git -c user.name=chenchong882 -c user.email=chenchong885@gmail.com c
 - PE band 用 5%/95% 百分位，不用 min/max（AMD 2023 GAAP EPS≈0 會讓 min/max 爆掉）
 - SEC 分項解析要接受 `ConsolidationItemsAxis=OperatingSegments` 與「產品×分部」雙維度，並用覆蓋率選池
 - TSM（外國發行人）無季度分項、財報幣別 TWD、EPS 走 yfinance fallback
+
+## 本機改完 push 前先注意 cron 衝突
+
+GitHub Actions 每天台北 06:00 自動跑 `update.py` 並 push `site/data/*.json`。若本機也改了程式碼／資料，push 前務必先 `git fetch` 檢查遠端是否已有當天的自動更新 commit，避免 `data/*.json` 衝突。
+
+衝突處理：`data/*.json` 是產生出來的檔案，不用手動 merge——衝突時直接 `git checkout --theirs site/data/*.json` 採遠端版本，rebase 完成後再 `FORCE=1 .venv/bin/python scripts/update.py` 用新程式碼重新產生一次，重新 commit 這批資料再 push。
