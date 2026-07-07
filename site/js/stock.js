@@ -81,7 +81,7 @@
         spark.setOption({
           grid: { left: 0, right: 0, top: 2, bottom: 2 },
           xAxis: { type: "category", data: trend.map((t) => t.q), show: false },
-          yAxis: { type: "value", show: false, scale: true },
+          yAxis: { type: "value", show: false },
           tooltip: {
             backgroundColor: "#1a2030", borderColor: "#2a3345",
             textStyle: { color: CHART_TEXT, fontSize: 11 }, confine: true,

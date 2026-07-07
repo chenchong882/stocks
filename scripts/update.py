@@ -74,10 +74,11 @@ def find_filing(filings, period_end, annual):
 
 
 def build_sankey_periods(symbol, cik, filings, ticker, quote, prev_periods):
-    """桑基圖多期資料：季度（近 5 季）＋年度（近 4 財年）。
+    """桑基圖多期資料：季度（近 5 季）＋年度（近 4 財年），舊期間累積保留。
 
     歷史財報不會變，已算過的期間直接沿用快取（除非 FORCE，或先前
-    沒抓到分項而現在有新的申報可以再試）。
+    沒抓到分項而現在有新的申報可以再試）。滑出 yfinance 視窗的舊期間
+    無法重抓，一律保留先前算好的快取，讓期間清單隨時間累積。
     """
     force = os.environ.get("FORCE") == "1"
     prev_map = {(p["periodEnd"], bool(p.get("annual"))): p
@@ -122,6 +123,11 @@ def build_sankey_periods(symbol, cik, filings, ticker, quote, prev_periods):
             "segSource": (filing or {}).get("accession"),
             **sk,
         })
+
+    # 滑出視窗的舊期間：yfinance 已抓不到，保留先前的快取（FORCE 也不丟）
+    seen = {(p["periodEnd"], bool(p.get("annual"))) for p in out}
+    out += [p for p in (prev_periods or [])
+            if (p["periodEnd"], bool(p.get("annual"))) not in seen]
 
     # 新到舊；同期末日時季度排前（前端預設取第一個季度）
     out.sort(key=lambda p: (p["periodEnd"], not p["annual"]), reverse=True)
